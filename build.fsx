@@ -7,61 +7,6 @@ open Fake.NuGetHelper
 open Fake.OctoTools
 open System.IO
 
-[<AutoOpen>]
-module Npm =
-  open System
-
-  let npmFileName =
-    match isUnix with
-      | true -> "/usr/local/bin/npm"
-      | _ -> "./packages/Npm.js/tools/npm.cmd"
-
-  type InstallArgs =
-    | Standard
-    | Forced
-
-  type NpmCommand =
-    | Install of InstallArgs
-    | Run of string
-
-  type NpmParams = {
-    Src: string
-    NpmFilePath: string
-    WorkingDirectory: string
-    Command: NpmCommand
-    Timeout: TimeSpan
-  }
-
-  let npmParams = {
-    Src = ""
-    NpmFilePath = npmFileName
-    Command = Install Standard
-    WorkingDirectory = "."
-    Timeout = TimeSpan.MaxValue
-  }
-
-  let parseInsallArgs = function
-    | Standard -> ""
-    | Forced -> " --force"
-
-  let parse command =
-    match command with
-    | Install installArgs -> sprintf "install%s" (installArgs |> parseInsallArgs)
-    | Run str -> sprintf "run %s" str
-
-  let run npmParams =
-    let npmPath = Path.GetFullPath(npmParams.NpmFilePath)
-    let arguments = npmParams.Command |> parse
-    let result = ExecProcess (
-                  fun info ->
-                    info.FileName <- npmPath
-                    info.WorkingDirectory <- npmParams.WorkingDirectory
-                    info.Arguments <- arguments
-                  ) npmParams.Timeout
-    if result <> 0 then failwith (sprintf "'npm %s' failed" arguments)
-
-  let Npm f =
-    npmParams |> f |> run
 
 [<AutoOpen>]
 module OctoHelpers =
@@ -91,13 +36,14 @@ module AppVeyorHelpers =
     !! (folder + "*.nupkg")
     |> Seq.iter (fun artifact -> execOnAppveyor (sprintf "PushArtifact %s" artifact))
 
+
 [<AutoOpen>]
 module Settings =
   let buildDir = "./.build/"
-  let packagingDir = buildDir + "FAKESimple.Web/_PublishedWebsites/FAKESimple.Web"
+  let packagingDir = buildDir + "TestApp.Web/_PublishedWebsites/TestApp.Web"
   let deployDir = "./.deploy/"
   let testDir = "./.test/"
-  let projects = !! "src/**/*.csproj" -- "src/**/*.Tests.csproj"
+  let projects = !! "src/**/*.xproj"
   let testProjects = !! "src/**/*.Tests.csproj"
   let packages = !! "./**/packages.config"
 
@@ -129,48 +75,13 @@ module Targets =
     |> Seq.iter build
   )
 
-  Target "Web" (fun _ ->
-    Npm (fun p ->
-      { p with
-          Command = Install Standard
-          WorkingDirectory = "./src/FAKESimple.Web/"
-      })
-
-    Npm (fun p ->
-      { p with
-          Command = (Run "build")
-          WorkingDirectory = "./src/FAKESimple.Web/"
-      })
-  )
-
-  Target "CopyWeb" (fun _ ->
-    let targetDir = packagingDir @@ "dist"
-    let sourceDir = "./src/FAKESimple.Web/dist"
-    CopyDir targetDir sourceDir (fun x -> true)
-  )
-
-  Target "BuildTest" (fun() ->
-    testProjects
-    |> MSBuildDebug testDir "Build"
-    |> ignore
-  )
-
-  Target "Test" (fun() ->
-    !! (testDir + "/*.Tests.dll")
-        |> xUnit2 (fun p ->
-            {p with
-                ShadowCopy = false;
-                HtmlOutputPath = Some (testDir @@ "xunit.html");
-                XmlOutputPath = Some (testDir @@ "xunit.xml");
-            })
-  )
-
+   
   Target "Package" (fun _ ->
     trace "Packing the web"
     let version = getVersion()
     NuGet (fun p ->
           {p with
-              Authors = ["Tomas Jansson"]
+              Authors = ["OPF"]
               Project = "FAKESimple.Web"
               Description = "Demoing FAKE"
               OutputPath = deployDir
@@ -212,10 +123,6 @@ module Targets =
 "Clean"
 ==> "RestorePackages"
 ==> "Build"
-==> "Web"
-==> "CopyWeb"
-==> "BuildTest"
-==> "Test"
 ==> "Package"
 ==> "Publish"
 ==> "Create release"

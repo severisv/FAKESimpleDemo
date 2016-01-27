@@ -119,3 +119,4 @@ MetricResults/
 
 _configs/
 .fake/
+src/TestApp/project.lock.json
